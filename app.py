@@ -132,26 +132,35 @@ def append_to_sheet(sheets, rows):
     ).execute()
 
 st.title("Invoice Intake — Made More Marketing")
-st.write("Upload a PDF invoice. It will be archived to Drive and line items appended to the Sheet.")
+st.write("Upload one or more PDF invoices. Each will be archived to Drive and line items appended to the Sheet.")
 
-uploaded = st.file_uploader("Choose PDF", type="pdf")
+uploaded_files = st.file_uploader("Choose PDF(s)", type="pdf", accept_multiple_files=True)
 
-if uploaded and st.button("Process Invoice"):
-    pdf_bytes = uploaded.read()
-    items, vendor = extract_line_items(pdf_bytes, uploaded.name)
-    st.write(f"Detected vendor: **{vendor}** — {len(items)} line item(s)")
-
+if uploaded_files and st.button("Process Invoices"):
     drive, sheets = get_google_services()
+    all_items = []
+    success_count = 0
+
+    for uploaded in uploaded_files:
+        pdf_bytes = uploaded.read()
+        items, vendor = extract_line_items(pdf_bytes, uploaded.name)
+        st.write(f"**{uploaded.name}** — detected vendor: {vendor} — {len(items)} line item(s)")
+
+        if drive and sheets:
+            date_str = datetime.now().strftime("%Y-%m-%d")
+            safe_vendor = vendor.replace(" ", "")
+            archive_name = f"{safe_vendor}_{date_str}_{uploaded.name}"
+            link = upload_pdf(drive, pdf_bytes, archive_name)
+            for item in items:
+                item["PDF Link"] = link
+            append_to_sheet(sheets, items)
+            success_count += 1
+        all_items.extend(items)
+
     if drive and sheets:
-        date_str = datetime.now().strftime("%Y-%m-%d")
-        safe_vendor = vendor.replace(" ", "")
-        archive_name = f"{safe_vendor}_{date_str}.pdf"
-        link = upload_pdf(drive, pdf_bytes, archive_name)
-        for item in items:
-            item["PDF Link"] = link
-        append_to_sheet(sheets, items)
-        st.success(f"Archived as {archive_name} and appended {len(items)} row(s) to the Sheet.")
-        st.dataframe(items)
+        st.success(f"Processed {success_count} file(s) and appended {len(all_items)} total row(s) to the Sheet.")
     else:
         st.warning("Google credentials not configured — extraction preview only.")
-        st.dataframe(items)
+
+    if all_items:
+        st.dataframe(all_items)
