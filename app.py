@@ -133,6 +133,7 @@ def append_to_sheet(sheets, rows):
 
 st.title("Invoice Intake — Made More Marketing")
 st.write("Upload one or more PDF invoices. Each will be archived to Drive and line items appended to the Sheet.")
+st.info("For best performance, do not exceed 10 PDFs at a time.")
 
 uploaded_files = st.file_uploader("Choose PDF(s)", type="pdf", accept_multiple_files=True)
 
