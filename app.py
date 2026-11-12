@@ -131,7 +131,7 @@ def append_to_sheet(sheets, rows):
         body=body
     ).execute()
 
-st.title("Invoice Intake — King Labs")
+st.title("Invoice Intake — Made More Marketing")
 st.write("Upload a PDF invoice. It will be archived to Drive and line items appended to the Sheet.")
 
 uploaded = st.file_uploader("Choose PDF", type="pdf")
