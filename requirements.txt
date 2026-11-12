@@ -1,0 +1,6 @@
+pdfplumber
+google-api-python-client
+google-auth
+google-auth-httplib2
+streamlit
+python-dateutil
