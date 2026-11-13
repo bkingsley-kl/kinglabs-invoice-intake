@@ -23,6 +23,11 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets"
 ]
 
+# Debug (temporary)
+st.write(f"Debug — Client ID: {CLIENT_ID}")
+st.write(f"Debug — Client secret length: {len(CLIENT_SECRET)}")
+st.write(f"Debug — Client secret starts with GOCSPX-: {CLIENT_SECRET.startswith('GOCSPX-')}")
+
 def get_flow():
     client_config = {
         "web": {
