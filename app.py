@@ -3,30 +3,42 @@ import pdfplumber
 import io
 import os
 from datetime import datetime
-from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import json
 
-# --- CONFIG (replace with your values or Replit secrets) ---
+# --- CONFIG ---
 FOLDER_ID = "1hoL2SpFLRy1LpRDkHHXNbdQEyQGFOEqn"
 SHEET_ID = "14zsPHEUSkl4O_uYKbetJ8MKL2R9hmK3Wq42Sc8PmFx8"
 SHEET_TAB = "Invoices"
 
-# Service account JSON: in Replit, store the full JSON as a secret named GOOGLE_SERVICE_ACCOUNT_JSON
-# and load it like this:
-SERVICE_ACCOUNT_INFO = json.loads(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON", "{}"))
+CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
+REDIRECT_URI = "https://e40917e1-1bdd-46b5-9070-cc27c4f45171-00-18a7kuhead3e6.kirk.replit.dev/"
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/spreadsheets"
 ]
 
+def get_flow():
+    client_config = {
+        "web": {
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [REDIRECT_URI]
+        }
+    }
+    return Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=REDIRECT_URI)
+
 def get_google_services():
-    if not SERVICE_ACCOUNT_INFO or "client_email" not in SERVICE_ACCOUNT_INFO:
-        st.error("Missing or invalid GOOGLE_SERVICE_ACCOUNT_JSON secret.")
+    if "credentials" not in st.session_state:
         return None, None
-    creds = service_account.Credentials.from_service_account_info(SERVICE_ACCOUNT_INFO, scopes=SCOPES)
+    creds = Credentials(**st.session_state.credentials)
     drive = build("drive", "v3", credentials=creds)
     sheets = build("sheets", "v4", credentials=creds)
     return drive, sheets
@@ -58,10 +70,8 @@ def extract_line_items(pdf_bytes, filename):
     # Very light line-item heuristics (expand these for production)
     lines = [l.strip() for l in full_text.splitlines() if l.strip()]
     for line in lines:
-        # Look for patterns that look like item rows (hours or amounts present)
         if any(x in line for x in ["$50.00", "$80", "hrs", "Field Focus", "Newsletter", "eBlast"]):
             parts = line.split()
-            # crude split — refine with more samples
             title = " ".join(parts[:-3]) if len(parts) > 3 else line
             hours = ""
             amount = ""
@@ -81,11 +91,10 @@ def extract_line_items(pdf_bytes, filename):
                     "Invoice #": invoice_num,
                     "Rate": rate,
                     "Amount": amount,
-                    "PDF Link": "",  # filled after upload
+                    "PDF Link": "",
                     "Submitted At": datetime.now().strftime("%Y-%m-%d")
                 })
     if not items:
-        # fallback single row so something always logs
         items.append({
             "Date": "",
             "Work Type": "",
@@ -108,13 +117,11 @@ def upload_pdf(drive, pdf_bytes, filename):
     return file.get("webViewLink")
 
 def append_to_sheet(sheets, rows):
-    # Read current headers so deleted columns are respected
     header_resp = sheets.spreadsheets().values().get(
         spreadsheetId=SHEET_ID, range=f"{SHEET_TAB}!1:1"
     ).execute()
     headers = header_resp.get("values", [[]])[0]
 
-    # Map each extracted row to the current header order
     values = []
     for row in rows:
         mapped = []
@@ -131,9 +138,22 @@ def append_to_sheet(sheets, rows):
         body=body
     ).execute()
 
+# --- UI ---
 st.title("Invoice Intake — Made More Marketing")
 st.write("Upload one or more PDF invoices. Each will be archived to Drive and line items appended to the Sheet.")
 st.info("For best performance, do not exceed 10 PDFs at a time.")
+
+# OAuth login
+if "credentials" not in st.session_state:
+    if not CLIENT_ID or not CLIENT_SECRET:
+        st.error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET secrets.")
+    else:
+        flow = get_flow()
+        auth_url, _ = flow.authorization_url(prompt="consent")
+        st.link_button("Login with Google", auth_url)
+        st.stop()
+else:
+    st.success("Logged in with Google")
 
 uploaded_files = st.file_uploader("Choose PDF(s)", type="pdf", accept_multiple_files=True)
 
@@ -161,7 +181,7 @@ if uploaded_files and st.button("Process Invoices"):
     if drive and sheets:
         st.success(f"Processed {success_count} file(s) and appended {len(all_items)} total row(s) to the Sheet.")
     else:
-        st.warning("Google credentials not configured — extraction preview only.")
+        st.warning("Not logged in — extraction preview only.")
 
     if all_items:
         st.dataframe(all_items)
