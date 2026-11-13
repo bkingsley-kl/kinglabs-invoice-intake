@@ -143,13 +143,33 @@ st.title("Invoice Intake — Made More Marketing")
 st.write("Upload one or more PDF invoices. Each will be archived to Drive and line items appended to the Sheet.")
 st.info("For best performance, do not exceed 10 PDFs at a time.")
 
+# Handle OAuth callback
+query_params = st.query_params
+if "code" in query_params and "credentials" not in st.session_state:
+    try:
+        flow = get_flow()
+        flow.fetch_token(code=query_params["code"])
+        creds = flow.credentials
+        st.session_state.credentials = {
+            "token": creds.token,
+            "refresh_token": creds.refresh_token,
+            "token_uri": creds.token_uri,
+            "client_id": creds.client_id,
+            "client_secret": creds.client_secret,
+            "scopes": creds.scopes
+        }
+        st.query_params.clear()
+        st.rerun()
+    except Exception as e:
+        st.error(f"Login failed: {e}")
+
 # OAuth login
 if "credentials" not in st.session_state:
     if not CLIENT_ID or not CLIENT_SECRET:
         st.error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET secrets.")
     else:
         flow = get_flow()
-        auth_url, _ = flow.authorization_url(prompt="consent")
+        auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline")
         st.link_button("Login with Google", auth_url)
         st.stop()
 else:
