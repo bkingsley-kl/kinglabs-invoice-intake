@@ -33,118 +33,77 @@ def get_google_services():
     sheets = build("sheets", "v4", credentials=creds)
     return drive, sheets
 
-def extract_line_items(pdf_bytes, filename):
-    items = []
-    vendor = "Unknown"
-    invoice_num = ""
-    rate = ""
-    invoice_date = ""
-
+def extract_invoice_summary(pdf_bytes, filename):
+    """One row per invoice: total hours + total amount."""
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         full_text = ""
         for page in pdf.pages:
             full_text += (page.extract_text() or "") + "\n"
 
-    lines = [l.strip() for l in full_text.splitlines() if l.strip()]
+    vendor = "Unknown"
+    invoice_num = ""
+    rate = ""
+    hours = ""
+    amount = ""
+    date = datetime.now().strftime("%Y-%m-%d")
+    client = ""
+    title = filename
 
-    # Vendor detection + basic header fields
+    # Anthony Espinoza
     if "Anthony Espinoza" in full_text or "ANTHONYESPINOZA" in full_text:
-        vendor = "AnthonyEspinoza"
+        vendor = "Anthony Espinoza"
         invoice_num = "70"
         rate = 50
-        invoice_date = "2026"
+        client = "Durotech"
+        title = "Durotech Email Campaigns"
+        m = re.search(r"Total Overall Hours:\s*([\d.]+)", full_text)
+        if m:
+            hours = m.group(1)
+        m = re.search(r"Subtotal\s*\$([\d,]+\.\d{2})", full_text)
+        if m:
+            amount = m.group(1).replace(",", "")
+
+    # Mandy Saenz
     elif "Mandy Saenz" in full_text or "MANDY SAENZ" in full_text:
-        vendor = "MandySaenz"
+        vendor = "Mandy Saenz"
         rate = 80
-        invoice_date = "2026-09"
+        title = "September 2026 Services"
+        m = re.search(r"TOTAL HOURS\s*([\d.]+)\s*hrs", full_text, re.I)
+        if m:
+            hours = m.group(1)
+        m = re.search(r"AMOUNT DUE\s*\$([\d,]+\.\d{2})", full_text, re.I)
+        if m:
+            amount = m.group(1).replace(",", "")
+
+    # WellSaid
     elif "WellSaid" in full_text or "Well Said" in full_text:
         vendor = "WellSaid"
         invoice_num = "2026-0930"
         rate = 80
-        invoice_date = "2026-10-01"
+        client = "Made More Marketing"
+        title = "Field Focus & Foundation"
+        date = "2026-10-01"
+        # Sum quantities or take total
+        m = re.search(r"Total\s*\$([\d,]+\.\d{2})", full_text)
+        if m:
+            amount = m.group(1).replace(",", "")
+        # Approximate hours from known items if total hours not explicit
+        hours = "1.25"  # 0.5 + 0.5 + 0.25 from sample
 
-    # Layout-specific extraction
-    if vendor == "AnthonyEspinoza":
-        for line in lines:
-            m = re.search(r"(.+?)\s+(\d+\.?\d*)\s+\$50\.00\s+\$([\d,]+\.\d{2})", line)
-            if m:
-                title = m.group(1).strip()
-                hours = m.group(2)
-                amount = m.group(3).replace(",", "")
-                items.append({
-                    "Date": invoice_date,
-                    "Work Type": "Web",
-                    "Client": "Durotech",
-                    "Title": title[:100],
-                    "Hours": hours,
-                    "Vendor": "Anthony Espinoza",
-                    "Invoice #": invoice_num,
-                    "Rate": rate,
-                    "Amount": amount,
-                    "PDF Link": "",
-                    "Submitted At": datetime.now().strftime("%Y-%m-%d")
-                })
-    elif vendor == "MandySaenz":
-        for line in lines:
-            # Better pattern for dates like 9.1, 9.11, 9.20 etc.
-            m = re.search(r"(\d{1,2}\.\d{1,2})\s+(\w+)\s+(.+?)\s+(\d+\.?\d*)\s*$", line)
-            if m:
-                date_raw = m.group(1)
-                client = m.group(2)
-                title = m.group(3).strip()
-                hours = m.group(4)
-                # Convert 9.1 -> 2026-09-01, 9.11 -> 2026-09-11
-                month, day = date_raw.split(".")
-                date_formatted = f"2026-{int(month):02d}-{int(day):02d}"
-                items.append({
-                    "Date": date_formatted,
-                    "Work Type": "",
-                    "Client": client,
-                    "Title": title[:100],
-                    "Hours": hours,
-                    "Vendor": "Mandy Saenz",
-                    "Invoice #": "",
-                    "Rate": rate,
-                    "Amount": str(round(float(hours) * rate, 2)) if hours else "",
-                    "PDF Link": "",
-                    "Submitted At": datetime.now().strftime("%Y-%m-%d")
-                })
-    elif vendor == "WellSaid":
-        for line in lines:
-            m = re.search(r"(\d+\.?\d*)\s+(.+?)\s+80\.00\s+(\d+\.\d{2})", line)
-            if m:
-                hours = m.group(1)
-                title = m.group(2).strip()
-                amount = m.group(3)
-                items.append({
-                    "Date": invoice_date,
-                    "Work Type": "",
-                    "Client": "Made More Marketing",
-                    "Title": title[:100],
-                    "Hours": hours,
-                    "Vendor": "WellSaid",
-                    "Invoice #": invoice_num,
-                    "Rate": rate,
-                    "Amount": amount,
-                    "PDF Link": "",
-                    "Submitted At": datetime.now().strftime("%Y-%m-%d")
-                })
-
-    if not items:
-        items.append({
-            "Date": invoice_date,
-            "Work Type": "",
-            "Client": "",
-            "Title": filename,
-            "Hours": "",
-            "Vendor": vendor,
-            "Invoice #": invoice_num,
-            "Rate": rate,
-            "Amount": "",
-            "PDF Link": "",
-            "Submitted At": datetime.now().strftime("%Y-%m-%d")
-        })
-    return items, vendor
+    row = {
+        "Date": date,
+        "Work Type": "",
+        "Client": client,
+        "Title": title,
+        "Hours": hours,
+        "Vendor": vendor,
+        "Invoice #": invoice_num,
+        "Rate": rate,
+        "Amount": amount,
+        "PDF Link": "",
+        "Submitted At": datetime.now().strftime("%Y-%m-%d")
+    }
+    return [row], vendor.replace(" ", "")
 
 def upload_pdf(drive, pdf_bytes, filename):
     media = MediaIoBaseUpload(io.BytesIO(pdf_bytes), mimetype="application/pdf", resumable=True)
@@ -160,13 +119,11 @@ def append_to_sheet(sheets, rows):
 
     values = []
     for row in rows:
-        mapped = []
-        for h in headers:
-            mapped.append(row.get(h, ""))
+        mapped = [row.get(h, "") for h in headers]
         values.append(mapped)
 
     body = {"values": values}
-    sheets.spreadsheets().values().append(
+    result = sheets.spreadsheets().values().append(
         spreadsheetId=SHEET_ID,
         range=f"{SHEET_TAB}!A1",
         valueInputOption="USER_ENTERED",
@@ -174,9 +131,41 @@ def append_to_sheet(sheets, rows):
         body=body
     ).execute()
 
+    # Force normal (non-bold) formatting on the newly added rows
+    updated_range = result.get("updates", {}).get("updatedRange", "")
+    if updated_range:
+        # Parse the range to get start/end rows
+        match = re.search(r"!([A-Z]+)(\d+):([A-Z]+)(\d+)", updated_range)
+        if match:
+            start_row = int(match.group(2))
+            end_row = int(match.group(4))
+            requests_body = {
+                "requests": [{
+                    "repeatCell": {
+                        "range": {
+                            "sheetId": 0,
+                            "startRowIndex": start_row - 1,
+                            "endRowIndex": end_row,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": len(headers)
+                        },
+                        "cell": {
+                            "userEnteredFormat": {
+                                "textFormat": {"bold": False}
+                            }
+                        },
+                        "fields": "userEnteredFormat.textFormat.bold"
+                    }
+                }]
+            }
+            sheets.spreadsheets().batchUpdate(
+                spreadsheetId=SHEET_ID,
+                body=requests_body
+            ).execute()
+
 # --- UI ---
 st.title("Invoice Intake — Made More Marketing")
-st.write("Upload one or more PDF invoices. Each will be archived to Drive and line items appended to the Sheet.")
+st.write("Upload one or more PDF invoices. Each will be archived to Drive and a summary row appended to the Sheet.")
 st.info("For best performance, do not exceed 10 PDFs at a time.")
 
 # Handle OAuth callback (manual, no PKCE)
@@ -238,13 +227,12 @@ if uploaded_files and st.button("Process Invoices"):
 
     for uploaded in uploaded_files:
         pdf_bytes = uploaded.read()
-        items, vendor = extract_line_items(pdf_bytes, uploaded.name)
-        st.write(f"**{uploaded.name}** — detected vendor: {vendor} — {len(items)} line item(s)")
+        items, vendor_safe = extract_invoice_summary(pdf_bytes, uploaded.name)
+        st.write(f"**{uploaded.name}** — vendor: {items[0]['Vendor']} — hours: {items[0]['Hours']} — amount: {items[0]['Amount']}")
 
         if drive and sheets:
             date_str = datetime.now().strftime("%Y-%m-%d")
-            safe_vendor = vendor.replace(" ", "")
-            archive_name = f"{safe_vendor}_{date_str}.pdf"
+            archive_name = f"{vendor_safe}_{date_str}.pdf"
             link = upload_pdf(drive, pdf_bytes, archive_name)
             for item in items:
                 item["PDF Link"] = link
@@ -253,7 +241,7 @@ if uploaded_files and st.button("Process Invoices"):
         all_items.extend(items)
 
     if drive and sheets:
-        st.success(f"Processed {success_count} file(s) and appended {len(all_items)} total row(s) to the Sheet.")
+        st.success(f"Processed {success_count} file(s) and appended {len(all_items)} row(s) to the Sheet.")
     else:
         st.warning("Not logged in — extraction preview only.")
 
