@@ -56,6 +56,7 @@ def extract_invoice_summary(pdf_bytes, filename):
     date = datetime.now().strftime("%Y-%m-%d")
     client = ""
     title = filename
+    work_type = ""
 
     # Anthony Espinoza
     if "Anthony Espinoza" in full_text or "ANTHONYESPINOZA" in full_text:
@@ -64,6 +65,7 @@ def extract_invoice_summary(pdf_bytes, filename):
         rate = 50
         client = "Durotech"
         title = "Durotech Email Campaigns"
+        work_type = "Web"
         m = re.search(r"Total Overall Hours:\s*([\d.]+)", full_text)
         if m:
             hours = m.group(1)
@@ -76,6 +78,7 @@ def extract_invoice_summary(pdf_bytes, filename):
         vendor = "Mandy Saenz"
         rate = 80
         title = "September 2026 Services"
+        work_type = "Design"
         m = re.search(r"TOTAL HOURS\s*([\d.]+)\s*hrs", full_text, re.I)
         if m:
             hours = m.group(1)
@@ -89,6 +92,7 @@ def extract_invoice_summary(pdf_bytes, filename):
         invoice_num = "2026-0930"
         rate = 80
         title = "Field Focus & Foundation"
+        work_type = "Email"
         date = "2026-10-01"
         m = re.search(r"\$([\d,]+\.\d{2})", full_text)
         if m:
@@ -101,7 +105,7 @@ def extract_invoice_summary(pdf_bytes, filename):
 
     row = {
         "Date": date,
-        "Work Type": "",
+        "Work Type": work_type,
         "Client": client,
         "Title": title,
         "Hours": hours,
