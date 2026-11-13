@@ -71,11 +71,10 @@ def extract_invoice_summary(pdf_bytes, filename):
         if m:
             amount = m.group(1).replace(",", "")
 
-    # Mandy Saenz — no explicit client, so Client = Vendor
+    # Mandy Saenz
     elif "Mandy Saenz" in full_text or "MANDY SAENZ" in full_text:
         vendor = "Mandy Saenz"
         rate = 80
-        client = "Mandy Saenz"
         title = "September 2026 Services"
         m = re.search(r"TOTAL HOURS\s*([\d.]+)\s*hrs", full_text, re.I)
         if m:
@@ -84,19 +83,21 @@ def extract_invoice_summary(pdf_bytes, filename):
         if m:
             amount = m.group(1).replace(",", "")
 
-    # WellSaid — client is not Made More Marketing (that's the bill-to)
+    # WellSaid
     elif "WellSaid" in full_text or "Well Said" in full_text:
         vendor = "WellSaid"
         invoice_num = "2026-0930"
         rate = 80
-        client = ""  # no separate client listed; bill-to is Made More Marketing
         title = "Field Focus & Foundation"
         date = "2026-10-01"
-        # Catch total amount more reliably
         m = re.search(r"\$([\d,]+\.\d{2})", full_text)
         if m:
             amount = m.group(1).replace(",", "")
         hours = "1.25"
+
+    # General fallback: if no client was found, use the vendor name
+    if not client:
+        client = vendor
 
     row = {
         "Date": date,
