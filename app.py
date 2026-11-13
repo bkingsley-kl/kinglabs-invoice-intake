@@ -52,11 +52,7 @@ def extract_line_items(pdf_bytes, filename):
         vendor = "AnthonyEspinoza"
         invoice_num = "70"
         rate = 50
-        # Try to find invoice date from text (fallback to submitted date)
-        for line in lines:
-            if re.search(r"\d{1,2}/\d{1,2}/\d{4}", line) or "2026" in line:
-                invoice_date = "2026"
-                break
+        invoice_date = "2026"
     elif "Mandy Saenz" in full_text or "MANDY SAENZ" in full_text:
         vendor = "MandySaenz"
         rate = 80
@@ -70,7 +66,6 @@ def extract_line_items(pdf_bytes, filename):
     # Layout-specific extraction
     if vendor == "AnthonyEspinoza":
         for line in lines:
-            # Look for lines that end with hours + $rate + $amount
             m = re.search(r"(.+?)\s+(\d+\.?\d*)\s+\$50\.00\s+\$([\d,]+\.\d{2})", line)
             if m:
                 title = m.group(1).strip()
@@ -91,15 +86,18 @@ def extract_line_items(pdf_bytes, filename):
                 })
     elif vendor == "MandySaenz":
         for line in lines:
-            # Pattern: date client project hours
-            m = re.search(r"(\d+\.\d+)\s+(\w+)\s+(.+?)\s+(\d+\.?\d*)$", line)
+            # Better pattern for dates like 9.1, 9.11, 9.20 etc.
+            m = re.search(r"(\d{1,2}\.\d{1,2})\s+(\w+)\s+(.+?)\s+(\d+\.?\d*)\s*$", line)
             if m:
-                date_part = m.group(1)
+                date_raw = m.group(1)
                 client = m.group(2)
                 title = m.group(3).strip()
                 hours = m.group(4)
+                # Convert 9.1 -> 2026-09-01, 9.11 -> 2026-09-11
+                month, day = date_raw.split(".")
+                date_formatted = f"2026-{int(month):02d}-{int(day):02d}"
                 items.append({
-                    "Date": f"2026-{date_part.replace('.', '-')}",
+                    "Date": date_formatted,
                     "Work Type": "",
                     "Client": client,
                     "Title": title[:100],
@@ -107,7 +105,7 @@ def extract_line_items(pdf_bytes, filename):
                     "Vendor": "Mandy Saenz",
                     "Invoice #": "",
                     "Rate": rate,
-                    "Amount": str(float(hours) * rate) if hours else "",
+                    "Amount": str(round(float(hours) * rate, 2)) if hours else "",
                     "PDF Link": "",
                     "Submitted At": datetime.now().strftime("%Y-%m-%d")
                 })
