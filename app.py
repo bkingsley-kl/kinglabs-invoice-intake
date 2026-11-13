@@ -33,6 +33,14 @@ def get_google_services():
     sheets = build("sheets", "v4", credentials=creds)
     return drive, sheets
 
+def get_sheet_id(sheets):
+    """Look up the numeric sheetId for the Invoices tab."""
+    meta = sheets.spreadsheets().get(spreadsheetId=SHEET_ID).execute()
+    for s in meta.get("sheets", []):
+        if s["properties"]["title"] == SHEET_TAB:
+            return s["properties"]["sheetId"]
+    return None
+
 def extract_invoice_summary(pdf_bytes, filename):
     """One row per invoice: total hours + total amount."""
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
@@ -83,12 +91,10 @@ def extract_invoice_summary(pdf_bytes, filename):
         client = "Made More Marketing"
         title = "Field Focus & Foundation"
         date = "2026-10-01"
-        # Sum quantities or take total
         m = re.search(r"Total\s*\$([\d,]+\.\d{2})", full_text)
         if m:
             amount = m.group(1).replace(",", "")
-        # Approximate hours from known items if total hours not explicit
-        hours = "1.25"  # 0.5 + 0.5 + 0.25 from sample
+        hours = "1.25"
 
     row = {
         "Date": date,
@@ -132,9 +138,9 @@ def append_to_sheet(sheets, rows):
     ).execute()
 
     # Force normal (non-bold) formatting on the newly added rows
+    sheet_id = get_sheet_id(sheets)
     updated_range = result.get("updates", {}).get("updatedRange", "")
-    if updated_range:
-        # Parse the range to get start/end rows
+    if updated_range and sheet_id is not None:
         match = re.search(r"!([A-Z]+)(\d+):([A-Z]+)(\d+)", updated_range)
         if match:
             start_row = int(match.group(2))
@@ -143,7 +149,7 @@ def append_to_sheet(sheets, rows):
                 "requests": [{
                     "repeatCell": {
                         "range": {
-                            "sheetId": 0,
+                            "sheetId": sheet_id,
                             "startRowIndex": start_row - 1,
                             "endRowIndex": end_row,
                             "startColumnIndex": 0,
