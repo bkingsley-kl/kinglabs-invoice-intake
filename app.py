@@ -148,7 +148,6 @@ query_params = st.query_params
 if "code" in query_params and "credentials" not in st.session_state:
     try:
         flow = get_flow()
-        # Pass stored code_verifier if we have one (PKCE)
         code_verifier = st.session_state.get("code_verifier")
         flow.fetch_token(code=query_params["code"], code_verifier=code_verifier)
         creds = flow.credentials
@@ -160,6 +159,8 @@ if "code" in query_params and "credentials" not in st.session_state:
             "client_secret": creds.client_secret,
             "scopes": creds.scopes
         }
+        if "code_verifier" in st.session_state:
+            del st.session_state.code_verifier
         st.query_params.clear()
         st.rerun()
     except Exception as e:
@@ -171,12 +172,9 @@ if "credentials" not in st.session_state:
         st.error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET secrets.")
     else:
         flow = get_flow()
-        auth_url, state = flow.authorization_url(
-            prompt="consent",
-            access_type="offline",
-            code_challenge_method=None  # disable PKCE for simplicity
-        )
-        st.session_state.code_verifier = None
+        auth_url, state = flow.authorization_url(prompt="consent", access_type="offline")
+        # Store code_verifier so the callback can use it
+        st.session_state.code_verifier = flow.code_verifier
         st.link_button("Login with Google", auth_url)
         st.stop()
 else:
