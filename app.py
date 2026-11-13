@@ -2,9 +2,9 @@ import streamlit as st
 import pdfplumber
 import io
 import os
+import requests
 from datetime import datetime
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import json
@@ -22,18 +22,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/spreadsheets"
 ]
-
-def get_flow():
-    client_config = {
-        "web": {
-            "client_id": CLIENT_ID,
-            "client_secret": CLIENT_SECRET,
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [REDIRECT_URI]
-        }
-    }
-    return Flow.from_client_config(client_config, scopes=SCOPES, redirect_uri=REDIRECT_URI)
+SCOPE_STR = " ".join(SCOPES)
 
 def get_google_services():
     if "credentials" not in st.session_state:
@@ -54,7 +43,6 @@ def extract_line_items(pdf_bytes, filename):
         for page in pdf.pages:
             full_text += (page.extract_text() or "") + "\n"
 
-    # Detect vendor from content
     if "Anthony Espinoza" in full_text or "ANTHONYESPINOZA" in full_text:
         vendor = "Anthony Espinoza"
         invoice_num = "70"
@@ -67,7 +55,6 @@ def extract_line_items(pdf_bytes, filename):
         invoice_num = "2026-0930"
         rate = 80
 
-    # Very light line-item heuristics (expand these for production)
     lines = [l.strip() for l in full_text.splitlines() if l.strip()]
     for line in lines:
         if any(x in line for x in ["$50.00", "$80", "hrs", "Field Focus", "Newsletter", "eBlast"]):
@@ -143,38 +130,51 @@ st.title("Invoice Intake — Made More Marketing")
 st.write("Upload one or more PDF invoices. Each will be archived to Drive and line items appended to the Sheet.")
 st.info("For best performance, do not exceed 10 PDFs at a time.")
 
-# Handle OAuth callback
+# Handle OAuth callback (manual, no PKCE)
 query_params = st.query_params
 if "code" in query_params and "credentials" not in st.session_state:
     try:
-        flow = get_flow()
-        code_verifier = st.session_state.get("code_verifier")
-        flow.fetch_token(code=query_params["code"], code_verifier=code_verifier)
-        creds = flow.credentials
-        st.session_state.credentials = {
-            "token": creds.token,
-            "refresh_token": creds.refresh_token,
-            "token_uri": creds.token_uri,
-            "client_id": creds.client_id,
-            "client_secret": creds.client_secret,
-            "scopes": creds.scopes
+        token_url = "https://oauth2.googleapis.com/token"
+        data = {
+            "code": query_params["code"],
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "redirect_uri": REDIRECT_URI,
+            "grant_type": "authorization_code"
         }
-        if "code_verifier" in st.session_state:
-            del st.session_state.code_verifier
+        resp = requests.post(token_url, data=data)
+        resp.raise_for_status()
+        token_data = resp.json()
+
+        st.session_state.credentials = {
+            "token": token_data["access_token"],
+            "refresh_token": token_data.get("refresh_token"),
+            "token_uri": token_url,
+            "client_id": CLIENT_ID,
+            "client_secret": CLIENT_SECRET,
+            "scopes": SCOPES
+        }
         st.query_params.clear()
         st.rerun()
     except Exception as e:
         st.error(f"Login failed: {e}")
+        if "resp" in locals():
+            st.error(resp.text)
 
 # OAuth login
 if "credentials" not in st.session_state:
     if not CLIENT_ID or not CLIENT_SECRET:
         st.error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET secrets.")
     else:
-        flow = get_flow()
-        auth_url, state = flow.authorization_url(prompt="consent", access_type="offline")
-        # Store code_verifier so the callback can use it
-        st.session_state.code_verifier = flow.code_verifier
+        auth_url = (
+            "https://accounts.google.com/o/oauth2/auth"
+            f"?client_id={CLIENT_ID}"
+            f"&redirect_uri={REDIRECT_URI}"
+            f"&scope={SCOPE_STR}"
+            "&response_type=code"
+            "&access_type=offline"
+            "&prompt=consent"
+        )
         st.link_button("Login with Google", auth_url)
         st.stop()
 else:
