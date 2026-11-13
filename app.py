@@ -23,11 +23,6 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets"
 ]
 
-# Debug (temporary)
-st.write(f"Debug — Client ID: {CLIENT_ID}")
-st.write(f"Debug — Client secret length: {len(CLIENT_SECRET)}")
-st.write(f"Debug — Client secret starts with GOCSPX-: {CLIENT_SECRET.startswith('GOCSPX-')}")
-
 def get_flow():
     client_config = {
         "web": {
@@ -153,7 +148,9 @@ query_params = st.query_params
 if "code" in query_params and "credentials" not in st.session_state:
     try:
         flow = get_flow()
-        flow.fetch_token(code=query_params["code"])
+        # Pass stored code_verifier if we have one (PKCE)
+        code_verifier = st.session_state.get("code_verifier")
+        flow.fetch_token(code=query_params["code"], code_verifier=code_verifier)
         creds = flow.credentials
         st.session_state.credentials = {
             "token": creds.token,
@@ -174,7 +171,12 @@ if "credentials" not in st.session_state:
         st.error("Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET secrets.")
     else:
         flow = get_flow()
-        auth_url, _ = flow.authorization_url(prompt="consent", access_type="offline")
+        auth_url, state = flow.authorization_url(
+            prompt="consent",
+            access_type="offline",
+            code_challenge_method=None  # disable PKCE for simplicity
+        )
+        st.session_state.code_verifier = None
         st.link_button("Login with Google", auth_url)
         st.stop()
 else:
