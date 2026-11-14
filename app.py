@@ -134,14 +134,20 @@ def append_to_sheet(sheets, rows):
     ).execute()
     headers = header_resp.get("values", [[]])[0]
 
+    # Collect the hyperlink formulas so we can re-apply them after formatting
+    hyperlink_values = []
     values = []
     for row in rows:
         mapped = []
         for h in headers:
             val = row.get(h, "")
-            # Write PDF Link as a HYPERLINK formula so it stays clickable
             if h == "PDF Link" and val and str(val).startswith("http"):
-                val = f'=HYPERLINK("{val}","View PDF")'
+                formula = f'=HYPERLINK("{val}","View PDF")'
+                hyperlink_values.append(formula)
+                val = formula
+            else:
+                if h == "PDF Link":
+                    hyperlink_values.append("")
             mapped.append(val)
         values.append(mapped)
 
@@ -154,7 +160,7 @@ def append_to_sheet(sheets, rows):
         body=body
     ).execute()
 
-    # Force plain formatting on new rows, but skip the PDF Link column so hyperlinks stay clickable
+    # Force plain formatting on ALL new rows (including PDF Link column)
     sheet_id = get_sheet_id(sheets)
     updated_range = result.get("updates", {}).get("updatedRange", "")
     if updated_range and sheet_id is not None:
@@ -162,55 +168,45 @@ def append_to_sheet(sheets, rows):
         if match:
             start_row = int(match.group(2))
             end_row = int(match.group(4))
-            # Find the PDF Link column index so we can skip it
-            pdf_col = headers.index("PDF Link") if "PDF Link" in headers else -1
 
-            requests_list = []
-            # Clear formatting on columns before PDF Link
-            if pdf_col > 0:
-                requests_list.append({
+            # Clear formatting on the entire new row range
+            requests_body = {
+                "requests": [{
                     "repeatCell": {
                         "range": {
                             "sheetId": sheet_id,
                             "startRowIndex": start_row - 1,
                             "endRowIndex": end_row,
                             "startColumnIndex": 0,
-                            "endColumnIndex": pdf_col
-                        },
-                        "cell": {
-                            "userEnteredFormat": {
-                                "backgroundColor": {"red": 1, "green": 1, "blue": 1},
-                                "textFormat": {"bold": False, "foregroundColor": {"red": 0, "green": 0, "blue": 0}}
-                            }
-                        },
-                        "fields": "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat"
-                    }
-                })
-            # Clear formatting on columns after PDF Link
-            if pdf_col >= 0 and pdf_col < len(headers) - 1:
-                requests_list.append({
-                    "repeatCell": {
-                        "range": {
-                            "sheetId": sheet_id,
-                            "startRowIndex": start_row - 1,
-                            "endRowIndex": end_row,
-                            "startColumnIndex": pdf_col + 1,
                             "endColumnIndex": len(headers)
                         },
                         "cell": {
                             "userEnteredFormat": {
                                 "backgroundColor": {"red": 1, "green": 1, "blue": 1},
-                                "textFormat": {"bold": False, "foregroundColor": {"red": 0, "green": 0, "blue": 0}}
+                                "textFormat": {
+                                    "bold": False,
+                                    "foregroundColor": {"red": 0, "green": 0, "blue": 0}
+                                }
                             }
                         },
                         "fields": "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat"
                     }
-                })
+                }]
+            }
+            sheets.spreadsheets().batchUpdate(
+                spreadsheetId=SHEET_ID,
+                body=requests_body
+            ).execute()
 
-            if requests_list:
-                sheets.spreadsheets().batchUpdate(
+            # Re-apply the HYPERLINK formulas so they stay clickable after formatting
+            pdf_col_letter = chr(ord('A') + headers.index("PDF Link")) if "PDF Link" in headers else "J"
+            if hyperlink_values:
+                link_body = {"values": [[v] for v in hyperlink_values]}
+                sheets.spreadsheets().values().update(
                     spreadsheetId=SHEET_ID,
-                    body={"requests": requests_list}
+                    range=f"{SHEET_TAB}!{pdf_col_letter}{start_row}",
+                    valueInputOption="USER_ENTERED",
+                    body=link_body
                 ).execute()
 
 # --- UI ---
