@@ -66,7 +66,7 @@ def extract_invoice_summary(pdf_bytes, filename):
         client = "Durotech"
         title = "Durotech Email Campaigns"
         work_type = "Web"
-        date = "2026-10-31"  # end of the work period covered
+        date = "2026-10-31"
         m = re.search(r"Total Overall Hours:\s*([\d.]+)", full_text)
         if m:
             hours = m.group(1)
@@ -80,7 +80,7 @@ def extract_invoice_summary(pdf_bytes, filename):
         rate = 80
         title = "September 2026 Services"
         work_type = "Design"
-        date = "2026-10-06"  # invoice date from the PDF
+        date = "2026-10-06"
         m = re.search(r"TOTAL HOURS\s*([\d.]+)\s*hrs", full_text, re.I)
         if m:
             hours = m.group(1)
@@ -101,11 +101,9 @@ def extract_invoice_summary(pdf_bytes, filename):
             amount = m.group(1).replace(",", "")
         hours = "1.25"
 
-    # Fallback if no date was set
     if not date:
         date = datetime.now().strftime("%Y-%m-%d")
 
-    # General fallback: if no client was found, use the vendor name
     if not client:
         client = vendor
 
@@ -150,7 +148,7 @@ def append_to_sheet(sheets, rows):
         body=body
     ).execute()
 
-    # Force normal (non-bold) formatting on the newly added rows
+    # Force plain formatting on the newly added rows (no bold, no background, black text)
     sheet_id = get_sheet_id(sheets)
     updated_range = result.get("updates", {}).get("updatedRange", "")
     if updated_range and sheet_id is not None:
@@ -170,10 +168,14 @@ def append_to_sheet(sheets, rows):
                         },
                         "cell": {
                             "userEnteredFormat": {
-                                "textFormat": {"bold": False}
+                                "backgroundColor": {"red": 1, "green": 1, "blue": 1},
+                                "textFormat": {
+                                    "bold": False,
+                                    "foregroundColor": {"red": 0, "green": 0, "blue": 0}
+                                }
                             }
                         },
-                        "fields": "userEnteredFormat.textFormat.bold"
+                        "fields": "userEnteredFormat.backgroundColor,userEnteredFormat.textFormat"
                     }
                 }]
             }
