@@ -136,7 +136,13 @@ def append_to_sheet(sheets, rows):
 
     values = []
     for row in rows:
-        mapped = [row.get(h, "") for h in headers]
+        mapped = []
+        for h in headers:
+            val = row.get(h, "")
+            # Write PDF Link as a HYPERLINK formula so it stays clickable
+            if h == "PDF Link" and val and str(val).startswith("http"):
+                val = f'=HYPERLINK("{val}","View PDF")'
+            mapped.append(val)
         values.append(mapped)
 
     body = {"values": values}
