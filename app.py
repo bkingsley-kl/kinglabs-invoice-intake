@@ -53,12 +53,12 @@ def extract_invoice_summary(pdf_bytes, filename):
     rate = ""
     hours = ""
     amount = ""
-    date = datetime.now().strftime("%Y-%m-%d")
+    date = ""
     client = ""
     title = filename
     work_type = ""
 
-    # Anthony Espinoza
+    # Anthony Espinoza — multi-month invoice (Feb–Oct 2026); use end of period
     if "Anthony Espinoza" in full_text or "ANTHONYESPINOZA" in full_text:
         vendor = "Anthony Espinoza"
         invoice_num = "70"
@@ -66,6 +66,7 @@ def extract_invoice_summary(pdf_bytes, filename):
         client = "Durotech"
         title = "Durotech Email Campaigns"
         work_type = "Web"
+        date = "2026-10-31"  # end of the work period covered
         m = re.search(r"Total Overall Hours:\s*([\d.]+)", full_text)
         if m:
             hours = m.group(1)
@@ -73,12 +74,13 @@ def extract_invoice_summary(pdf_bytes, filename):
         if m:
             amount = m.group(1).replace(",", "")
 
-    # Mandy Saenz
+    # Mandy Saenz — September 2026 work, invoice dated Oct 6
     elif "Mandy Saenz" in full_text or "MANDY SAENZ" in full_text:
         vendor = "Mandy Saenz"
         rate = 80
         title = "September 2026 Services"
         work_type = "Design"
+        date = "2026-10-06"  # invoice date from the PDF
         m = re.search(r"TOTAL HOURS\s*([\d.]+)\s*hrs", full_text, re.I)
         if m:
             hours = m.group(1)
@@ -86,7 +88,7 @@ def extract_invoice_summary(pdf_bytes, filename):
         if m:
             amount = m.group(1).replace(",", "")
 
-    # WellSaid
+    # WellSaid — dated 10/01/2026
     elif "WellSaid" in full_text or "Well Said" in full_text:
         vendor = "WellSaid"
         invoice_num = "2026-0930"
@@ -98,6 +100,10 @@ def extract_invoice_summary(pdf_bytes, filename):
         if m:
             amount = m.group(1).replace(",", "")
         hours = "1.25"
+
+    # Fallback if no date was set
+    if not date:
+        date = datetime.now().strftime("%Y-%m-%d")
 
     # General fallback: if no client was found, use the vendor name
     if not client:
