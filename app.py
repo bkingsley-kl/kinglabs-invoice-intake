@@ -17,7 +17,7 @@ SHEET_TAB = "Invoices"
 
 CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")
-REDIRECT_URI = "https://e40917e1-1bdd-46b5-9070-cc27c4f45171-00-18a7kuhead3e6.kirk.replit.dev/"
+REDIRECT_URI = "https://mmm-invoice-intake.onrender.com/"
 
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
